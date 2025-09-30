@@ -69,14 +69,6 @@ class Sphere : public ovito_XYZ_format_obj
     
 };
 
-void ovito_xyz_creator(ovito_XYZ_format_obj& obj)
-{
-    var(obj.id);
-    var(obj.x);
-    var(obj.y);
-    var(obj.z);
-}
-
 #ifdef BUILD_EXECUTABLE
 int main(int argc, char* argv[])
 {
@@ -92,7 +84,7 @@ int main(int argc, char* argv[])
 
     ovito_XYZ_format_obj::dumpToFile(arr.getBuffer().data(), arr.getBuffer().size());
 
-    // zrobimy zwykły automat komórkowy montecarlo tylko 3D - w wrzucimy w Avitoo
+    // zrobimy zwykły automat komórkowy montecarlo tylko 3D - w wrzucimy w Avitoo jako film .itd
 
     // potem możemy przemyśleć to przesunięcie i takie okrągłe sąsiedztwo (w sumie to będzie to samo, tylko przesunięte o ileś tam)
 
