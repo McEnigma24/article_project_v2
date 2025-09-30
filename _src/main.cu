@@ -53,7 +53,12 @@ struct ovito_XYZ_format_obj
 
 class Sphere : public ovito_XYZ_format_obj
 {
-    
+
+public:
+    static void dumpToFile(const Multi_Dimension_View_Array<Sphere>& arr)
+    {
+        ovito_XYZ_format_obj::dumpToFile(arr.get_vector().data(), arr.get_vector().size());
+    }
 };
 
 #ifdef BUILD_EXECUTABLE
@@ -72,8 +77,13 @@ int main(int argc, char* argv[])
                 for(int k=0; k<3; k++)
                     arr.get(i, j, k)->init(rand() % 3, i, j, k);
 
-        ovito_XYZ_format_obj::dumpToFile(arr.get_vector().data(), arr.get_vector().size());
+        Sphere::dumpToFile(arr);
     }
+
+
+    
+
+
 
     // zrobimy zwykły automat komórkowy montecarlo tylko 3D - w wrzucimy w Avitoo jako film .itd
 
