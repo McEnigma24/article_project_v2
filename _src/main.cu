@@ -33,9 +33,9 @@ struct ovito_XYZ_format_obj
     void init(int id, unit x, unit y, unit z)
     {
         this->id = id;
-        this->x = x;
-        this->y = y;
-        this->z = z;
+        this->x = x * 2.4f;
+        this->y = y * 2.4f;
+        this->z = z * 2.4f;
     }
 
     static void dumpToFile(const ovito_XYZ_format_obj* arr, size_t size, const string& FILEPATH = "output/test.xyz")
@@ -52,7 +52,7 @@ struct ovito_XYZ_format_obj
         for(int i=0; i<size; i++)
         {
             const auto& obj = arr[i];
-            fout << obj.id << " " << obj.x << " " << obj.y << " " << obj.z << endl;
+            fout << obj.x << " " << obj.y << " " << obj.z << " " << obj.id << endl;
         }
 
         if (!fout)
@@ -84,12 +84,11 @@ int main(int argc, char* argv[])
 
     Multi_Dimension_View_Array<Sphere> arr;
     arr.set_sizes(3, 3, 3);
-    arr.get(0, 0, 0)->init(0, 0, 0, 0);
-    arr.get(0, 1, 0)->init(0, 0, 1, 0);
-    arr.get(0, 2, 0)->init(0, 0, 2, 0);
-    arr.get(0, 1, 1)->init(1, 0, 1, 1);
-    arr.get(0, 1, 2)->init(1, 0, 1, 2);
-    arr.get(0, 2, 1)->init(1, 0, 2, 1);
+
+    for(int i=0; i<3; i++)
+        for(int j=0; j<3; j++)
+            for(int k=0; k<3; k++)
+                arr.get(i, j, k)->init(rand() % 3, i, j, k);
 
     ovito_XYZ_format_obj::dumpToFile(arr.getBuffer().data(), arr.getBuffer().size());
 
