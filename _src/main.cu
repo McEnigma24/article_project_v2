@@ -5,22 +5,6 @@
 
 #define sphere_radius ( 1.0f )
 
-#ifdef GPU
-#define GPU_LINE(...) __VA_ARGS__
-#else
-#define GPU_LINE(...) 
-#endif
-
-#ifdef CPU
-#define CPU_LINE(...) __VA_ARGS__
-#else
-#define CPU_LINE(...) 
-#endif
-
-GPU_LINE(__host__)
-GPU_LINE(__device__)
-GPU_LINE(__device__ __host__)
-
 typedef float unit;
 // typedef double unit;
 
@@ -38,9 +22,12 @@ struct ovito_XYZ_format_obj
         this->z = z * 2.4f;
     }
 
-    static void dumpToFile(const ovito_XYZ_format_obj* arr, size_t size, const string& FILEPATH = "output/test.xyz")
+    static void dumpToFile(const ovito_XYZ_format_obj* arr, size_t size)
     {
-        std::ofstream fout(FILEPATH, std::ios::out | std::ios::trunc);
+        CPU_LINE(const string& FILEPATH = "output/cpu.xyz";)
+        GPU_LINE(const string& FILEPATH = "output/gpu.xyz";)
+
+        std::ofstream fout(FILEPATH, std::ios::out | std::ios::app);
         if (!fout)
         {
             std::cerr << "Nie można otworzyć pliku do nadpisania: " << FILEPATH << "\n";
@@ -72,17 +59,21 @@ class Sphere : public ovito_XYZ_format_obj
 #ifdef BUILD_EXECUTABLE
 int main(int argc, char* argv[])
 {
+    srand(time(NULL));
     OpenMP_GPU_test();
 
     Multi_Dimension_View_Array<Sphere> arr;
     arr.set_sizes(3, 3, 3);
 
-    for(int i=0; i<3; i++)
-        for(int j=0; j<3; j++)
-            for(int k=0; k<3; k++)
-                arr.get(i, j, k)->init(rand() % 3, i, j, k);
+    for(int x = 0; x < 10; x++)
+    {
+        for(int i=0; i<3; i++)
+            for(int j=0; j<3; j++)
+                for(int k=0; k<3; k++)
+                    arr.get(i, j, k)->init(rand() % 3, i, j, k);
 
-    ovito_XYZ_format_obj::dumpToFile(arr.getBuffer().data(), arr.getBuffer().size());
+        ovito_XYZ_format_obj::dumpToFile(arr.get_vector().data(), arr.get_vector().size());
+    }
 
     // zrobimy zwykły automat komórkowy montecarlo tylko 3D - w wrzucimy w Avitoo jako film .itd
 

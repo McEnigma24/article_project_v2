@@ -13,18 +13,17 @@ function build_all()
     
     if [ "$FLAG_TESTING_ACTIVE" == "Yes" ]; then
     {
-        CMAKE_FLAGS="$CMAKE_FLAGS -DCTEST_ACTIVE=ON"
+        CMAKE_FLAGS="$CMAKE_FLAGS -DARTICLE_PROJECT_V2___CTEST_ACTIVE=ON"
     }
     fi
     if [ "$FLAG_BUILDING_LIBRARY" == "Yes" ]; then
     {
-        CMAKE_FLAGS="$CMAKE_FLAGS -DBUILD_LIBRARY=ON"
+        CMAKE_FLAGS="$CMAKE_FLAGS -DARTICLE_PROJECT_V2___BUILD_LIBRARY=ON"
     }
     fi
 
     # mv .cpp .cu #
     [ -f "$DIR_BUILD/_deps/core-src/_src/main.cpp" ] && mv "$DIR_BUILD/_deps/core-src/_src/main.cpp" "$DIR_BUILD/_deps/core-src/_src/main.cu" 2> /dev/null
-    [ -f "$DIR_BUILD/_deps/multi_array-src/_src/main.cpp" ] && mv "$DIR_BUILD/_deps/multi_array-src/_src/main.cpp" "$DIR_BUILD/_deps/multi_array-src/_src/main.cu" 2> /dev/null
 
     cmake -S . -B $DIR_BUILD $CMAKE_FLAGS;
     cmake --build $DIR_BUILD;
