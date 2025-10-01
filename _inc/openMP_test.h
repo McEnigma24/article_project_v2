@@ -1,3 +1,6 @@
+#pragma once
+#include "parallel_common.h"
+
 #define CCE(x)                                                                                                                                   \
 {                                                                                                                                                \
     cudaError_t err = x;                                                                                                                         \

@@ -34,17 +34,17 @@ add_definitions(-DSOURCE_PATH_SIZE=${SOURCE_PATH_SIZE})
 # https://caiorss.github.io/C-Cpp-Notes/compiler-flags-options.html
 # https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wfatal-errors
 
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -Wall -Wextra")                                                             # to see everything
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -Wfatal-errors -Werror=uninitialized -Werror=init-self -Werror=reorder")    # for normal coding
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native -w")                                                         # for release
+# set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -g -Wall -Wextra")                                                             # to see everything
+# set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -g -Wfatal-errors -Werror=uninitialized -Werror=init-self -Werror=reorder")    # for normal coding
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 -march=native -w")                                                         # for release
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -fopenmp")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -mavx2")
 
 #                                                                  https://hjlebbink.github.io/x86doc/
 #                                                                  - look for *.o file
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -S") # ASSEMBLY
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -S -fverbose-asm") # ASSEMBLY with comments
+# set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -S") # ASSEMBLY
+# set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -S -fverbose-asm") # ASSEMBLY with comments
 
 set(COMPILE_FLAGS "${COMPILE_FLAGS} -m64")
 set(LINK_FLAGS "${LINK_FLAGS} -m64")
@@ -113,11 +113,11 @@ else()
     set_target_properties(${TARGET_NAME} PROPERTIES ${COMPILE_FLAGS} ${LINK_FLAGS})
     target_link_libraries(${TARGET_NAME} PUBLIC ${ALL_LIBRARIES})
 
-    set(TARGET_NAME "${CONST_TARGET_NAME}_gpu.exe")
-    add_executable(${TARGET_NAME} ${SOURCES})
-    target_compile_definitions(${TARGET_NAME} PRIVATE LINUX BUILD_EXECUTABLE GPU)
-    set_target_properties(${TARGET_NAME} PROPERTIES ${COMPILE_FLAGS} ${LINK_FLAGS})
-    target_link_libraries(${TARGET_NAME} PUBLIC ${ALL_LIBRARIES})
+    # set(TARGET_NAME "${CONST_TARGET_NAME}_gpu.exe")
+    # add_executable(${TARGET_NAME} ${SOURCES})
+    # target_compile_definitions(${TARGET_NAME} PRIVATE LINUX BUILD_EXECUTABLE GPU)
+    # set_target_properties(${TARGET_NAME} PROPERTIES ${COMPILE_FLAGS} ${LINK_FLAGS})
+    # target_link_libraries(${TARGET_NAME} PUBLIC ${ALL_LIBRARIES})
 endif()
 
 option(ARTICLE_PROJECT_V2___CTEST_ACTIVE "Testing is active" OFF)  # default value - could be overwritten by provided FLAG

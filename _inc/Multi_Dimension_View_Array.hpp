@@ -1,10 +1,15 @@
 #include "__preprocessor__.h"
-#include "common.h"
+#include "parallel_common.h"
 #include <vector>
 #include <span>
 
 // #define BOUND_CHECKS_Multi_Dimension_View_Array(...) __VA_ARGS__
 #define BOUND_CHECKS_Multi_Dimension_View_Array(...)
+
+struct coords
+{
+    u64 x, y, z;
+};
 
 template <typename T>
 class Multi_Dimension_View_Array
@@ -66,6 +71,18 @@ public:
         BOUND_CHECKS_Multi_Dimension_View_Array(if (!(x < buffer.size())) FATAL_ERROR("accesing beyond vector bounds");)
 
             return &buffer[x];
+    }
+
+    coords get_coords(u64 index_1d) const
+    {
+        BOUND_CHECKS_Multi_Dimension_View_Array(if (!(index_1d < buffer.size())) FATAL_ERROR("accesing beyond vector bounds");)
+
+        coords c;
+        c.z = index_1d / (WIDTH * HEIGHT);
+        c.y = (index_1d - c.z * (WIDTH * HEIGHT)) / WIDTH;
+        c.x = index_1d - c.z * (WIDTH * HEIGHT) - c.y * WIDTH;
+
+        return c;
     }
 
     GPU_LINE(__host__)
