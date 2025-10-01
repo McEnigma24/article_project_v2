@@ -180,20 +180,20 @@ int main(int argc, char* argv[])
     ObjTracker<Multi_Dimension_View_Array<Sphere>, sim_steps> obj_tracker(cube_side, cube_side, cube_side);
 
     time_stamp_reset();
-    // #pragma omp parallel
+    #pragma omp parallel
     {
         for(int step = 0; step < (sim_steps - 1); step++)
         {
             auto& arr = obj_tracker.get_current_obj();
             
-            // #pragma omp for schedule(static)
+            #pragma omp for schedule(static)
             for(int i=0; i<arr.get_total_number(); i++)
             {
                 per_sphere(obj_tracker, arr.get_coords(i));
             }
 
-            // #pragma omp barrier
-            // #pragma omp single
+            #pragma omp barrier
+            #pragma omp single
             {
                 obj_tracker.next_cycle();
             }
@@ -205,11 +205,17 @@ int main(int argc, char* argv[])
 
     time_stamp("io DONE");
 
+    // teraz któryś z tych początkowych stanów można zapisać albo zawsze do niego kilkoma iteracjami dochodzić
+    // na takim stanie odpalić nagrzewanie z dwóch stron tych sfer
+    // i przechodzić po sąsiadach, tylko tym razem sprawdzać temperaturę sąsiadów, i dołączać się do większej - tutaj już zobaczyć w Notatki co Gruby chciał
 
-    // zrobimy zwykły automat komórkowy montecarlo tylko 3D - w wrzucimy w Avitoo jako film .itd
+
+
+
+    // DO TEGO MOMENTU JUŻ DAJĘ ZNAĆ GRUBEMU //
 
     // potem możemy przemyśleć to przesunięcie i takie okrągłe sąsiedztwo (w sumie to będzie to samo, tylko przesunięte o ileś tam)
-
+    // przesunięcie o pół sfery w jedną stronę, a cykliczność indexów zrobi swoje
 
     return 0;
 }
