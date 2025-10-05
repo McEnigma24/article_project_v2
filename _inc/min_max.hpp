@@ -41,5 +41,5 @@ public:
         count++;
     }
 
-    T get() const { return count > 0 ? sum / count : T{}; }
+    T get() const { return count > 0 ? (sum / count) : T{}; }
 };
