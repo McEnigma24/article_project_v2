@@ -46,8 +46,8 @@ set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -mavx2")
 # set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -S") # ASSEMBLY
 # set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -S -fverbose-asm") # ASSEMBLY with comments
 
-set(COMPILE_FLAGS "${COMPILE_FLAGS} -m64")
-set(LINK_FLAGS "${LINK_FLAGS} -m64")
+set(COMPILE_FLAGS "${COMPILE_FLAGS} -m64 -std=c++20")
+set(LINK_FLAGS "${LINK_FLAGS} -m64 -std=c++20")
 
 
 

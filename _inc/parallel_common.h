@@ -21,3 +21,9 @@
 #include "curand_kernel.h"
 #include "device_launch_parameters.h"
 #endif
+
+
+// typedef float unit;
+typedef double unit;
+
+#define u(x) ( static_cast<unit>(x) )

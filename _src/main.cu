@@ -2,18 +2,20 @@
 #include "openMP_test.h"
 #include "Multi_Dimension_View_Array.hpp"
 #include "fstream"
-#include "parallel_common.h"
+#include "RGB.hpp"
+#include "min_max.hpp"
 
 #define sphere_radius ( 1.0f )
 #define ID_RANGE ( 5 )
 
-typedef float unit;
-// typedef double unit;
+// °C to K
+#define ZERO_CELC_IN_KELV ( u(273.15) )
 
-struct ovito_XYZ_format_obj
+struct Sphere
 {
     int id;
     unit x, y, z;
+    unit t;
 
     GPU_LINE(__device__ __host__)
     void init(int id, unit x, unit y, unit z)
@@ -22,9 +24,11 @@ struct ovito_XYZ_format_obj
         this->x = x * 2.4f;
         this->y = y * 2.4f;
         this->z = z * 2.4f;
+        this->t = (std::rand() % 40) + ZERO_CELC_IN_KELV - 20; // 20 °C
     }
 
-    static void dump_to_file(const ovito_XYZ_format_obj* arr, size_t size)
+    // x, y, z - id - t //
+    static void dump_to_file(const Sphere* arr, size_t size)
     {
         CPU_LINE(const string& FILEPATH = "output/cpu.xyz";)
         GPU_LINE(const string& FILEPATH = "output/gpu.xyz";)
@@ -41,7 +45,15 @@ struct ovito_XYZ_format_obj
         for(int i=0; i<size; i++)
         {
             const auto& obj = arr[i];
-            fout << obj.x << " " << obj.y << " " << obj.z << " " << obj.id << endl;
+            char buf[256];
+            int len = std::snprintf(//  x  y  z id  t
+                    buf, sizeof(buf), "%lf %lf %lf %d %f\n",
+                    obj.x, obj.y, obj.z, obj.id, obj.t
+            );
+            if (len > 0)
+            {
+                fout << buf;
+            }
         }
 
         if (!fout)
@@ -51,14 +63,10 @@ struct ovito_XYZ_format_obj
         }
         fout.close();
     }
-};
 
-class Sphere : public ovito_XYZ_format_obj
-{
-public:
     static void dump_to_file(const Multi_Dimension_View_Array<Sphere>& arr)
     {
-        ovito_XYZ_format_obj::dump_to_file(arr.get_vector().data(), arr.get_vector().size());
+        dump_to_file(arr.get_vector().data(), arr.get_vector().size());
     }
 };
 
@@ -117,18 +125,24 @@ public:
 template<size_t N>
 void per_sphere(ObjTracker<Multi_Dimension_View_Array<Sphere>, N>& obj_tracker, const coords& my_coords)
 {
-    constexpr int neighbor_range = 1;
-
     auto& current_array = obj_tracker.get_current_obj();
     auto& next_arr = obj_tracker.get_next_obj();
-
-    const int my_id = current_array.get(my_coords.x, my_coords.y, my_coords.z)->id;
-    int& my_next_id = next_arr.get(my_coords.x, my_coords.y, my_coords.z)->id;
-
-    std::array<u8, ID_RANGE> id_tab;
-    id_tab.fill(0);
     
-    // pętla po sąsiadach
+    const auto& current_obj = *current_array.get(my_coords.x, my_coords.y, my_coords.z);
+    auto& next_obj = *next_arr.get(my_coords.x, my_coords.y, my_coords.z);
+    
+    unit biggest_temp = current_obj.t;
+    int biggest_temp_id = current_obj.id;
+    
+    constexpr int neighbor_range = 1;
+    constexpr int neighbor_width = (neighbor_range * 2) + 1;
+    constexpr int neighbor_count = neighbor_width * neighbor_width * neighbor_width - 1;
+    // średnia z temperatury sąsiadów -> liczymy delte i można ją zparametryzować
+    // żeby nie od razu jakby własna temperatura stawała się taka sama jak otoczenia
+
+    Average<unit> neighbor_avg_temp;
+
+    // pętla po sąsiadach - Moora 3D
     for(int dz=-neighbor_range; dz<=neighbor_range; dz++)
         for(int dy=-neighbor_range; dy<=neighbor_range; dy++)
             for(int dx=-neighbor_range; dx<=neighbor_range; dx++)
@@ -140,20 +154,38 @@ void per_sphere(ObjTracker<Multi_Dimension_View_Array<Sphere>, N>& obj_tracker, 
                 int nz = ((my_coords.z + dz) + current_array.get_depth())     % current_array.get_depth();
 
                 const Sphere* neighbor = current_array.get(nx, ny, nz);
-                
-                id_tab[neighbor->id]++;
+
+                neighbor_avg_temp.add(neighbor->t);
+
+                if(biggest_temp < neighbor->t)
+                {
+                    biggest_temp = neighbor->t;
+                    biggest_temp_id = neighbor->id;
+                }
             }
+    
+    unit full_delta = std::abs(neighbor_avg_temp.get() - current_obj.t);
 
-    u8 most_frequent_id_index = 0;
-    for(int i=1; i<ID_RANGE; i++)
+    
+
+    // tutaj jakąś deltę obliczyć z sądiadów i zastosować do siebie //
+    next_obj.t = current_obj.t;
+
+
+
+    // dodatek z zewnątrz //
+    const unit MAX = current_array.get(current_array.get_width() - 1, my_coords.y, my_coords.z)->x;
+    constexpr unit range = u(10); // ogrzewanie na jaka głębokość w ilości sfer
+    if ( value_between((unit)0, current_obj.x, range)
+      || value_between((unit)(MAX - range), (unit)current_obj.x, MAX))
     {
-        if(id_tab[most_frequent_id_index] < id_tab[i])
-        {
-            most_frequent_id_index = i;
-        }
+        unit distance_to_Heat_Source = (value_between((unit)0, current_obj.x, range)) 
+                                          ? current_obj.x
+                                          : (MAX - current_obj.x);
+        unit temp_increase = (u(range - distance_to_Heat_Source) / u(range)) * u(10); // max 10 K
+        next_obj.t += temp_increase;
     }
-
-    my_next_id = most_frequent_id_index;
+    next_obj.id = biggest_temp_id;
 }
 
 template<size_t N>
@@ -173,7 +205,7 @@ int main(int argc, char* argv[])
 {
     srand(time(NULL));
     constexpr int cube_side = 90;
-    constexpr int sim_steps = 5;
+    constexpr int sim_steps = 10;
 
     // ObjTracker - mogę mu podać tyle samo co sim_steps, wtedy zapisze jak już będzie po wszystkim -> albo batch, po którym zapiszę wszystko do pliku
 
