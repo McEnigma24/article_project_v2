@@ -21,19 +21,19 @@ public:
 };
 
 template<typename T>
-bool value_between(const T& lv, const T& v, const T& rv)
-{
-    return (lv <= v) && (v <= rv);
-}
-
-template<typename T>
 class Average
 {
     T sum;
     size_t count;
 
 public:
-    Average() : sum({}), count(0) {}
+    Average() { init(); }
+
+    void init()
+    {
+        sum = {};
+        count = 0;
+    }
 
     void add(const T& value)
     {

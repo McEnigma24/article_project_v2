@@ -20,6 +20,7 @@
 #include "cuda_runtime.h"
 #include "curand_kernel.h"
 #include "device_launch_parameters.h"
+// #include <cuda/barrier>
 #endif
 
 

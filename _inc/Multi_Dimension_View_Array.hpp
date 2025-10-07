@@ -47,20 +47,19 @@ public:
         DEPTH = depth;
         buffer_size = WIDTH * HEIGHT * DEPTH;
 
+        CPU_LINE(if(buffer_ptr) delete[] buffer_ptr);
         if(preallocated_buffer)
         {
             buffer_ptr = preallocated_buffer;
         }
-        else
-        {
-            buffer_ptr = new T[buffer_size];
-        }
+        CPU_LINE(else { buffer_ptr = new T[buffer_size]; })
     }
 
     GPU_LINE(__host__ __device__) u64 get_width() const { return WIDTH; }
     GPU_LINE(__host__ __device__) u64 get_height() const { return HEIGHT; }
     GPU_LINE(__host__ __device__) u64 get_depth() const { return DEPTH; }
     GPU_LINE(__host__ __device__) u64 get_total_number() const { return buffer_size; }
+    GPU_LINE(__host__ __device__) T* get_data() { return buffer_ptr; }
 
     GPU_LINE(__host__ __device__)
     T* get(u64 x, u64 y, u64 z)
@@ -86,6 +85,7 @@ public:
             return &buffer_ptr[x];
     }
 
+    GPU_LINE(__host__ __device__)
     coords get_coords(u64 index_1d) const
     {
         CPU_LINE(BOUND_CHECKS_Multi_Dimension_View_Array(if (!(index_1d < buffer_size)) FATAL_ERROR("accesing beyond vector bounds");))
