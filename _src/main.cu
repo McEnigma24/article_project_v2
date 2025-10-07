@@ -91,11 +91,12 @@ public:
         set(width, height, depth);
     }
 
+    GPU_LINE(__host__ __device__)
     void set(i64 width, i64 height, i64 depth, Sphere* pre_allocation = nullptr)
     {
         u64 count_spheres_in_one_iteration = width * height * depth;
         u64 count_all_iterations = count_spheres_in_one_iteration * N;
-        var(CORE::humanReadableBytes(count_all_iterations * sizeof(Sphere)));
+        CPU_LINE(var(CORE::humanReadableBytes(count_all_iterations * sizeof(Sphere)));)
 
         current_array_index = 0;
 
@@ -127,7 +128,7 @@ public:
 
     ~ObjTracker()
     {
-        if(all_chunks_ptr) delete[] all_chunks_ptr;
+        CPU_LINE(if(all_chunks_ptr) delete[] all_chunks_ptr);
     }
 
     Multi_Dimension_View_Array<Sphere>& get_current_obj()
@@ -235,13 +236,22 @@ void dump_all_saved_states_to_file(ObjTracker<N>& obj_tracker)
     }
 }
 
+
+
+
+
+constexpr int cube_side = 90;
+constexpr int sim_steps = 100;
+
+__global__ void init_ObjTracker(ObjTracker<sim_steps>* dev_objTracker, i64 width, i64 height, i64 depth, Sphere* dev_all_chunks)
+{
+    dev_objTracker->set(width, height, depth, dev_all_chunks);
+}
+
 #ifdef BUILD_EXECUTABLE
 int main(int argc, char* argv[])
 {
     srand(time(NULL));
-    constexpr int cube_side = 90;
-    constexpr int sim_steps = 100;
-
     // ObjTracker - mogę mu podać tyle samo co sim_steps, wtedy zapisze jak już będzie po wszystkim -> albo batch, po którym zapiszę wszystko do pliku
 
     ObjTracker<sim_steps> obj_tracker(cube_side, cube_side, cube_side);
@@ -285,15 +295,22 @@ int main(int argc, char* argv[])
 
         size_t all_chunks_total_size_count = obj_tracker.get_total_allocated_size();
 
-        // Alokacja - obj trackera
+        // Alokacja - obj trackera //
         ObjTracker<sim_steps>* dev_obj_tracker = nullptr;
         CCE(cudaMalloc((void**)&dev_obj_tracker, sizeof(ObjTracker<sim_steps>)));
         CCE(cudaMemcpy(dev_obj_tracker, &obj_tracker, sizeof(ObjTracker<sim_steps>), cudaMemcpyHostToDevice));
 
-        // Alokacja - pamięci pod spodem na iteracje
+        // Alokacja - pamięci pod spodem na iteracje //
         Sphere* dev_all_chunks = nullptr;
         CCE(cudaMalloc((void**)&dev_all_chunks, all_chunks_total_size_count));
         CCE(cudaMemcpy(dev_all_chunks, obj_tracker.get_all_chunks_ptr(), all_chunks_total_size_count * sizeof(Sphere), cudaMemcpyHostToDevice));
+
+        auto width = obj_tracker.get_current_obj().get_width();
+        auto height = obj_tracker.get_current_obj().get_height();
+        auto depth = obj_tracker.get_current_obj().get_depth();
+
+        init_ObjTracker<<<1, 1>>>(dev_obj_tracker, width, height, depth, dev_all_chunks);
+        CCE(cudaDeviceSynchronize());
 
         // trzeba by zrobić tak, że Kernel dodaje już obiekt -> obj trackera -> którego pointery już pokazują na właściwe miejsca na dev //
 
