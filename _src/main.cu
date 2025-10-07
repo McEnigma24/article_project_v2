@@ -103,7 +103,7 @@ public:
         // prealokacja //
 
         if(pre_allocation) all_chunks_ptr = pre_allocation;
-        else all_chunks_ptr = new Sphere[count_all_iterations];   // wali cały jeden duży placek
+        CPU_LINE(else all_chunks_ptr = new Sphere[count_all_iterations];)   // wali cały jeden duży placek
 
         Sphere* current_chunk = all_chunks_ptr;
 
@@ -112,7 +112,7 @@ public:
             arr_of_objects[i].init(width, height, depth, current_chunk); // tutaj dla CPU można podać Null i będzie przypadek dla obszarów w różnych miejscach pamięci
             current_chunk += count_spheres_in_one_iteration;
 
-            initialize_sim(arr_of_objects[i]);
+            CPU_LINE(initialize_sim(arr_of_objects[i]);)
         }
     }
 
