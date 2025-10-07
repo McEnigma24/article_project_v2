@@ -272,14 +272,14 @@ void per_sphere(Sphere* current_array, Sphere* next_array, int i, u64 width, u64
             biggest_temp_id = neighbor.id;
         }
     }
-            
+
     // base line //
     next_obj.t = current_obj.t;
 
     // unit full_delta = neighbor_avg_temp.get() - current_obj.t;
     unit full_delta = (neighbor_avg_temp_sum / u(neighbor_avg_temp_count)) - current_obj.t;
     next_obj.t += (full_delta * (0.75)); // 75% zmiany do osiągnięcia średniej sąsiadów
-    
+
     // dodatek z zewnątrz //
     const u64 MAX = width - 1;
     constexpr u64 range = 10; // ogrzewanie na jaka głębokość w ilości sfer
@@ -334,25 +334,8 @@ __global__ void kernel_Calculations(Sphere** dev_tab_of_chunks, u64 width, u64 h
 
     for(int step = 0; step < (sim_steps - 1); step++)
     {
-        // auto& arr = dev_objTracker->get_current_obj();
-        // auto& arr = dev_objTracker->get_obj(0);
-
-
         per_sphere(dev_tab_of_chunks[step], dev_tab_of_chunks[step + 1], i, width, height, depth);
-
-        // dev_tab_of_chunks[step + 1] -> tab of spheres for 1 iter.
-
-
-
-        // dev_tab_of_chunks[step + 1][i].id = arr.get_depth();          // to działa
-
         // b.arrive_and_wait();
-
-        // __syncthreads();
-        // if (0 == i) {
-        //     dev_objTracker->next_cycle();
-        // }
-        // __syncthreads();
     }
 }
 
