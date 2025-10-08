@@ -52,7 +52,7 @@ public:
         {
             buffer_ptr = preallocated_buffer;
         }
-        CPU_LINE(else { buffer_ptr = new T[buffer_size]; })
+        else { buffer_ptr = new T[buffer_size]; }
     }
 
     GPU_LINE(__host__ __device__) u64 get_width() const { return WIDTH; }
