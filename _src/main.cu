@@ -8,7 +8,7 @@
 #define sphere_radius ( 1.0f )
 #define ID_RANGE ( 5 )
 
-constexpr int cube_side = 150;
+constexpr int cube_side = 50;
 constexpr int sim_steps = 10;
 
 // °C to K
@@ -32,6 +32,18 @@ struct Sphere
             this->id = rand() % ID_RANGE;
             this->t = (std::rand() % 40) + ZERO_CELC_IN_KELV - 20; // 20 °C
         #endif
+    }
+
+    GPU_LINE(__device__ __host__)
+    int get_id() const
+    {
+        return id;
+    }
+
+    GPU_LINE(__device__ __host__)
+    unit get_t() const
+    {
+        return t;
     }
 
     // x, y, z - id - t //
@@ -147,7 +159,8 @@ public:
         {
             arr_of_objects[i].init(width, height, depth, tab_of_preallocations[i]);
 
-            if(initialize && i == 0) initialize_sim(arr_of_objects[i], seed);
+            if(initialize && i == 0)
+                initialize_sim(arr_of_objects[i], seed);
         }
     }
 
@@ -219,17 +232,35 @@ coords get_coords(u64 index_1d, u64 WIDTH, u64 HEIGHT)
     return c;
 }
 
-GPU_LINE(__host__ __device__)
-void per_sphere(Sphere* current_array, Sphere* next_array, int i, u64 width, u64 height, u64 depth)
+GPU_LINE(__device__ __host__)
+void per_sphere(unsigned long seed, int step, Sphere* current_array, Sphere* next_array, int i, u64 width, u64 height, u64 depth)
 {
-    // auto& current_array = obj_tracker.get_current_obj();
-    // auto& next_arr = obj_tracker.get_next_obj();
-    
-    // const auto& current_obj = *current_array.get(my_coords.x, my_coords.y, my_coords.z);
-    // auto& next_obj = *next_arr.get(my_coords.x, my_coords.y, my_coords.z);
-
-    const auto& current_obj = current_array[i];
+    auto& current_obj = current_array[i];
     auto& next_obj = next_array[i];
+
+    if(step == 0)
+    {
+        // zrobimy tak, że obydwa mają pierwszy krok jako losowanie stanu //
+
+        #if defined(__CUDA_ARCH__) && defined(GPU)
+            // curandState state;
+            // curand_init(seed, i, 0, &state);
+
+            // current_obj.id = ((int)(curand_uniform(&state) * ID_RANGE)) % ID_RANGE;
+            // current_obj.t = (int)(curand_uniform(&state) * 40) + ZERO_CELC_IN_KELV - 20;
+            
+            // current_obj.id = 6;
+            // current_obj.t = 9;
+        #else
+            current_obj.id = rand() % ID_RANGE;
+            current_obj.t = (std::rand() % 40) + ZERO_CELC_IN_KELV - 20; // 20 °C
+        #endif
+    }
+
+    next_obj.t = current_obj.t;
+    next_obj.id = current_obj.id;
+
+    /*
 
     coords my_coords = get_coords(i, width, height);
 
@@ -299,6 +330,8 @@ void per_sphere(Sphere* current_array, Sphere* next_array, int i, u64 width, u64
     // tutaj też trzeba dodać, że po prostu jeśli jest wyższa wartość absolutna
     // (nie tylko relatywna - w porównaniu ze średnią)
     // to ten ma większą szansę "przekonywania", tak żeby było widać, że w miejscach gorących robią się większ ziarna
+
+    */
 }
 
 void dump_all_saved_states_to_file(ObjTracker& obj_tracker)
@@ -318,7 +351,7 @@ __global__ void init_ObjTracker(ObjTracker* dev_objTracker, i64 width, i64 heigh
     dev_objTracker->set_with_preallocated_tab(width, height, depth, dev_tab_of_chunks, seed);
 }
 
-__global__ void kernel_Calculations(Sphere** dev_tab_of_chunks, u64 width, u64 height, u64 depth)
+__global__ void kernel_Calculations(Sphere** dev_tab_of_chunks, u64 width, u64 height, u64 depth, unsigned long seed)
 {
     // __shared__ cuda::barrier<cuda::thread_scope_block> bar;
 
@@ -331,7 +364,8 @@ __global__ void kernel_Calculations(Sphere** dev_tab_of_chunks, u64 width, u64 h
 
     for(int step = 0; step < (sim_steps - 1); step++)
     {
-        per_sphere(dev_tab_of_chunks[step], dev_tab_of_chunks[step + 1], i, width, height, depth);
+        per_sphere(seed, step, dev_tab_of_chunks[step], dev_tab_of_chunks[step + 1], i, width, height, depth);
+        __syncthreads();
         // b.arrive_and_wait();
     }
 }
@@ -359,7 +393,7 @@ int main(int argc, char* argv[])
                 #pragma omp for schedule(static)
                 for(int i=0; i<arr.get_total_number(); i++)
                 {
-                    per_sphere(obj_tracker.get_current_obj().get(0), obj_tracker.get_next_obj().get(0), i,
+                    per_sphere(0, step, obj_tracker.get_current_obj().get(0), obj_tracker.get_next_obj().get(0), i,
                                 arr.get_width(), arr.get_height(), arr.get_depth()
                     );
                 }
@@ -415,7 +449,7 @@ int main(int argc, char* argv[])
         int BLOCK_SIZE = 128;
 		int NUMBER_OF_BLOCKS = obj_tracker.get_size_of_one_iteration() / BLOCK_SIZE + 1;
 
-        kernel_Calculations<<<NUMBER_OF_BLOCKS, BLOCK_SIZE>>>(dev_tab_of_chunks, width, height, depth);
+        kernel_Calculations<<<NUMBER_OF_BLOCKS, BLOCK_SIZE>>>(dev_tab_of_chunks, width, height, depth, 1);
         CCE(cudaDeviceSynchronize());
         time_stamp("GPU - FINISH");
 
