@@ -8,7 +8,7 @@
 #define sphere_radius ( 1.0f )
 #define ID_RANGE ( 5 )
 
-constexpr int cube_side = 90;
+constexpr int cube_side = 150;
 constexpr int sim_steps = 10;
 
 // °C to K
@@ -22,7 +22,7 @@ struct Sphere
     GPU_LINE(__device__ __host__)
     void init(unsigned long seed)
     {
-        #ifdef __CUDA_ARCH__
+        #if defined(__CUDA_ARCH__) && defined(GPU)
             curandState state;
             curand_init(seed, threadIdx.x, 0, &state);
 
@@ -129,7 +129,7 @@ public:
             arr_of_objects[i].init(width, height, depth, nullptr); // teraz kolejne kroki iteracji są w różnych miejscach
             // current_chunk += count_spheres_in_one_iteration;
 
-            CPU_LINE(initialize_sim(arr_of_objects[i]);)
+            CPU_LINE(initialize_sim(arr_of_objects[i], 0);)
         }
     }
 
@@ -168,7 +168,7 @@ public:
 
     ~ObjTracker()
     {
-        CPU_LINE(if(all_chunks_ptr) delete[] all_chunks_ptr);
+        // CPU_LINE(if(all_chunks_ptr) delete[] all_chunks_ptr);
     }
 
     GPU_LINE(__host__ __device__)
@@ -220,7 +220,6 @@ coords get_coords(u64 index_1d, u64 WIDTH, u64 HEIGHT)
 }
 
 GPU_LINE(__host__ __device__)
-// void per_sphere(ObjTracker& obj_tracker, const coords& my_coords)
 void per_sphere(Sphere* current_array, Sphere* next_array, int i, u64 width, u64 height, u64 depth)
 {
     // auto& current_array = obj_tracker.get_current_obj();
@@ -234,7 +233,6 @@ void per_sphere(Sphere* current_array, Sphere* next_array, int i, u64 width, u64
 
     coords my_coords = get_coords(i, width, height);
 
-    
     unit biggest_temp = current_obj.t;
     int biggest_temp_id = current_obj.id;
     
@@ -260,8 +258,6 @@ void per_sphere(Sphere* current_array, Sphere* next_array, int i, u64 width, u64
 
         // const Sphere* neighbor = current_array.get(nx, ny, nz);
         const Sphere& neighbor = current_array[d3tod1(nx, ny, nz, width, height)];
-
-        // neighbor_avg_temp.add(neighbor.t);
 
         neighbor_avg_temp_sum += neighbor.t;
         neighbor_avg_temp_count++;
@@ -316,6 +312,7 @@ void dump_all_saved_states_to_file(ObjTracker& obj_tracker)
     }
 }
 
+#ifdef GPU
 __global__ void init_ObjTracker(ObjTracker* dev_objTracker, i64 width, i64 height, i64 depth, Sphere** dev_tab_of_chunks, unsigned long seed)
 {
     dev_objTracker->set_with_preallocated_tab(width, height, depth, dev_tab_of_chunks, seed);
@@ -338,6 +335,7 @@ __global__ void kernel_Calculations(Sphere** dev_tab_of_chunks, u64 width, u64 h
         // b.arrive_and_wait();
     }
 }
+#endif
 
 #ifdef BUILD_EXECUTABLE
 int main(int argc, char* argv[])
@@ -361,7 +359,9 @@ int main(int argc, char* argv[])
                 #pragma omp for schedule(static)
                 for(int i=0; i<arr.get_total_number(); i++)
                 {
-                    per_sphere(obj_tracker, i);
+                    per_sphere(obj_tracker.get_current_obj().get(0), obj_tracker.get_next_obj().get(0), i,
+                                arr.get_width(), arr.get_height(), arr.get_depth()
+                    );
                 }
 
                 #pragma omp barrier
