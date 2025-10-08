@@ -29,21 +29,9 @@ struct Sphere
             this->id = ((int)(curand_uniform(&state) * ID_RANGE)) % ID_RANGE;
             this->t = (int)(curand_uniform(&state) * 40) + ZERO_CELC_IN_KELV - 20;
         #else
-            this->id = rand() % ID_RANGE;
+            this->id = std::rand() % ID_RANGE;
             this->t = (std::rand() % 40) + ZERO_CELC_IN_KELV - 20; // 20 °C
         #endif
-    }
-
-    GPU_LINE(__device__ __host__)
-    int get_id() const
-    {
-        return id;
-    }
-
-    GPU_LINE(__device__ __host__)
-    unit get_t() const
-    {
-        return t;
     }
 
     // x, y, z - id - t //
@@ -141,7 +129,8 @@ public:
             arr_of_objects[i].init(width, height, depth, nullptr); // teraz kolejne kroki iteracji są w różnych miejscach
             // current_chunk += count_spheres_in_one_iteration;
 
-            CPU_LINE(initialize_sim(arr_of_objects[i], 0);)
+            if(i == 0)
+                initialize_sim(arr_of_objects[i], 0);
         }
     }
 
@@ -238,24 +227,6 @@ void per_sphere(unsigned long seed, int step, Sphere* current_array, Sphere* nex
     auto& current_obj = current_array[i];
     auto& next_obj = next_array[i];
 
-    // if(0 == step)
-    // {
-    //     #if defined(__CUDA_ARCH__) && defined(GPU)
-    //         curandState state;
-    //         curand_init(seed, i, 0, &state);
-
-    //         current_obj.id = ((int)(curand_uniform(&state) * ID_RANGE)) % ID_RANGE;
-    //         current_obj.t = (int)(curand_uniform(&state) * 40) + ZERO_CELC_IN_KELV - 20;
-    //     #else
-    //         current_obj.id = rand() % ID_RANGE;
-    //         current_obj.t = (std::rand() % 40) + ZERO_CELC_IN_KELV - 20; // 20 °C
-    //     #endif
-
-    //     next_obj.t = current_obj.t;
-    //     next_obj.id = current_obj.id;
-    //     return;
-    // }
-
     coords my_coords = get_coords(i, width, height);
 
     unit biggest_temp = current_obj.t;
@@ -340,20 +311,20 @@ void dump_all_saved_states_to_file(ObjTracker& obj_tracker)
 }
 
 #ifdef GPU
-__global__ void init_ObjTracker(ObjTracker* dev_objTracker, i64 width, i64 height, i64 depth, Sphere** dev_tab_of_chunks, unsigned long seed)
-{
-    dev_objTracker->set_with_preallocated_tab(width, height, depth, dev_tab_of_chunks, seed);
-}
+    __global__ void init_ObjTracker(ObjTracker* dev_objTracker, i64 width, i64 height, i64 depth, Sphere** dev_tab_of_chunks, unsigned long seed)
+    {
+        dev_objTracker->set_with_preallocated_tab(width, height, depth, dev_tab_of_chunks, seed, false);
+    }
 
-__global__ void kernel_Calculations(Sphere** dev_tab_of_chunks, u64 width, u64 height, u64 depth, unsigned long seed, int step)
-{
-    int i = threadIdx.x + blockIdx.x * blockDim.x;
+    __global__ void kernel_Calculations(Sphere** dev_tab_of_chunks, u64 width, u64 height, u64 depth, unsigned long seed, int step)
+    {
+        int i = threadIdx.x + blockIdx.x * blockDim.x;
 
-    u64 total_spheres = width * height * depth;
-    if (i >= total_spheres) return;
+        u64 total_spheres = width * height * depth;
+        if (i >= total_spheres) return;
 
-    per_sphere(seed, step, dev_tab_of_chunks[step], dev_tab_of_chunks[step + 1], i, width, height, depth);
-}
+        per_sphere(seed, step, dev_tab_of_chunks[step], dev_tab_of_chunks[step + 1], i, width, height, depth);
+    }
 #endif
 
 #ifdef BUILD_EXECUTABLE
@@ -419,6 +390,7 @@ int main(int argc, char* argv[])
             if(first)
             {
                 first = false;
+                var(obj_tracker.get_current_obj().get_data());
                 CCE(cudaMemcpy(dev_chunk_ptr, obj_tracker.get_current_obj().get_data(), bytesize_of_one_iteration, cudaMemcpyHostToDevice));
             }
         }
@@ -476,12 +448,6 @@ int main(int argc, char* argv[])
         time_stamp("GPU - io DONE");
     }
     #endif
-
-
-    // do tego momentu wszystko z GPU działa //
-
-    // potem możemy przemyśleć to przesunięcie i takie okrągłe sąsiedztwo (w sumie to będzie to samo, tylko przesunięte o ileś tam)
-    // przesunięcie o pół sfery w jedną stronę, a cykliczność indexów zrobi swoje
 
     return 0;
 }
