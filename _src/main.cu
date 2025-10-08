@@ -238,23 +238,23 @@ void per_sphere(unsigned long seed, int step, Sphere* current_array, Sphere* nex
     auto& current_obj = current_array[i];
     auto& next_obj = next_array[i];
 
-    if(0 == step)
-    {
-        #if defined(__CUDA_ARCH__) && defined(GPU)
-            curandState state;
-            curand_init(seed, i, 0, &state);
+    // if(0 == step)
+    // {
+    //     #if defined(__CUDA_ARCH__) && defined(GPU)
+    //         curandState state;
+    //         curand_init(seed, i, 0, &state);
 
-            current_obj.id = ((int)(curand_uniform(&state) * ID_RANGE)) % ID_RANGE;
-            current_obj.t = (int)(curand_uniform(&state) * 40) + ZERO_CELC_IN_KELV - 20;
-        #else
-            current_obj.id = rand() % ID_RANGE;
-            current_obj.t = (std::rand() % 40) + ZERO_CELC_IN_KELV - 20; // 20 °C
-        #endif
+    //         current_obj.id = ((int)(curand_uniform(&state) * ID_RANGE)) % ID_RANGE;
+    //         current_obj.t = (int)(curand_uniform(&state) * 40) + ZERO_CELC_IN_KELV - 20;
+    //     #else
+    //         current_obj.id = rand() % ID_RANGE;
+    //         current_obj.t = (std::rand() % 40) + ZERO_CELC_IN_KELV - 20; // 20 °C
+    //     #endif
 
-        next_obj.t = current_obj.t;
-        next_obj.id = current_obj.id;
-        return;
-    }
+    //     next_obj.t = current_obj.t;
+    //     next_obj.id = current_obj.id;
+    //     return;
+    // }
 
     coords my_coords = get_coords(i, width, height);
 
@@ -413,8 +413,14 @@ int main(int argc, char* argv[])
         std::array<Sphere*, sim_steps> dev_arr_of_chunks;
         for(auto& dev_chunk_ptr : dev_arr_of_chunks)
         {
-            static bool first = true;
             CCE(cudaMalloc((void**)&dev_chunk_ptr, bytesize_of_one_iteration));
+            
+            static bool first = true;
+            if(first)
+            {
+                first = false;
+                CCE(cudaMemcpy(dev_chunk_ptr, obj_tracker.get_current_obj().get_data(), bytesize_of_one_iteration, cudaMemcpyHostToDevice));
+            }
         }
 
         // Alokacja - tablicy chunków na DEVICE i skopiowanie pointerów jakie dostaliśmy //
