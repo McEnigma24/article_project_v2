@@ -4,15 +4,9 @@
 #include "fstream"
 #include "RGB.hpp"
 #include "min_max.hpp"
+#include "selection_func.hpp"
+#include "consts.h"
 
-#define sphere_radius ( 1.0f )
-#define ID_RANGE ( 5 )
-
-constexpr int cube_side = 50;
-constexpr int sim_steps = 10;
-
-// °C to K
-#define ZERO_CELC_IN_KELV ( u(273.15) )
 
 struct Sphere
 {
@@ -229,17 +223,18 @@ void per_sphere(unsigned long seed, int step, Sphere* current_array, Sphere* nex
 
     coords my_coords = get_coords(i, width, height);
 
-    unit biggest_temp = current_obj.t;
-    int biggest_temp_id = current_obj.id;
-    
+    #ifdef ID_CHANGES_MAX_TEMP
+        unit biggest_temp = current_obj.t;
+        int biggest_temp_id = current_obj.id;
+    #endif
+
     constexpr int neighbor_range = 1;
     constexpr int neighbor_width = (neighbor_range * 2) + 1;
     constexpr int neighbor_count = neighbor_width * neighbor_width * neighbor_width - 1;
-    // średnia z temperatury sąsiadów -> liczymy delte i można ją zparametryzować
-    // żeby nie od razu jakby własna temperatura stawała się taka sama jak otoczenia
 
-    unit neighbor_avg_temp_sum = 0;
-    size_t neighbor_avg_temp_count = 0;
+    unit summed_temp_for_each_id[ID_RANGE];
+    for(int i=0; i<ID_RANGE; i++)
+        summed_temp_for_each_id[i] = 0;
     
     // pętla po sąsiadach - Moora 3D
     for(int dz=-neighbor_range; dz<=neighbor_range; dz++)
@@ -252,51 +247,93 @@ void per_sphere(unsigned long seed, int step, Sphere* current_array, Sphere* nex
         int ny = ((my_coords.y + dy) + height)    % height;
         int nz = ((my_coords.z + dz) + depth)     % depth;
 
-        // const Sphere* neighbor = current_array.get(nx, ny, nz);
         const Sphere& neighbor = current_array[d3tod1(nx, ny, nz, width, height)];
 
-        neighbor_avg_temp_sum += neighbor.t;
-        neighbor_avg_temp_count++;
+        #ifdef ID_CHANGES_MAX_TEMP
+            if(biggest_temp < neighbor.t)
+            {
+                biggest_temp = neighbor.t;
+                biggest_temp_id = neighbor.id;
+            }
+        #endif
 
-        if(biggest_temp < neighbor.t)
+        summed_temp_for_each_id[neighbor.id] += neighbor.t;
+    }
+
+
+
+    #ifdef TEMP_CHANGES
+        next_obj.t = current_obj.t; // base line //
+
+        unit neighbor_temp_sum = 0;
+        for(int i=0; i<ID_RANGE; i++)
         {
-            biggest_temp = neighbor.t;
-            biggest_temp_id = neighbor.id;
+            neighbor_temp_sum += summed_temp_for_each_id[i]; // not including self temperature //
         }
-    }
+        unit neighbor_temp_avg = neighbor_temp_sum / u(neighbor_count);
 
-    // base line //
-    next_obj.t = current_obj.t;
+        unit full_delta = neighbor_temp_avg - current_obj.t;
+        next_obj.t += (full_delta * (temp_adaptation_to_neighbors_factor));
 
-    // unit full_delta = neighbor_avg_temp.get() - current_obj.t;
-    unit full_delta = (neighbor_avg_temp_sum / u(neighbor_avg_temp_count)) - current_obj.t;
-    next_obj.t += (full_delta * (0.75)); // 75% zmiany do osiągnięcia średniej sąsiadów
+        // dodatek z zewnątrz //
+        const u64 MAX = width - 1;
+        if ( value_between(0, my_coords.x, heat_penetration_range)
+            || value_between((MAX - heat_penetration_range), my_coords.x, MAX))
+        {
+            u64 distance_to_Heat_Source = (value_between(0, my_coords.x, heat_penetration_range))
+                                        ? my_coords.x
+                                        : (MAX - my_coords.x);
+            unit temp_increase = (u(heat_penetration_range - distance_to_Heat_Source) / u(heat_penetration_range)) * u(sides_heating);
+            next_obj.t += temp_increase;
+        }
 
-    // next_obj.id = current_obj.id;
+        next_obj.t -= u(constant_cooling); // potem można bardziej zaawansowany //
+                                           // np. sprawdzanie jak daleko masz do krawędzi ze współrzędnych //
 
-    // dodatek z zewnątrz //
-    const u64 MAX = width - 1;
-    constexpr u64 range = 10; // ogrzewanie na jaka głębokość w ilości sfer
+        next_obj.t = std::max(next_obj.t, 1.0); // temp always bigger then absolute zero // not exacly zero to 0.1 to avoid division by zero //
+    #endif
 
-    if ( value_between(0, my_coords.x, range)
-        || value_between((MAX - range), my_coords.x, MAX))
-    {
-        u64 distance_to_Heat_Source = (value_between(0, my_coords.x, range))
-                                    ? my_coords.x
-                                    : (MAX - my_coords.x);
-        unit temp_increase = (u(range - distance_to_Heat_Source) / u(range)) * u(10); // max 10 K
-        next_obj.t += temp_increase;
-    }
+    #ifdef ID_CHANGES_MAX_TEMP
+        next_obj.id = biggest_temp_id;
+    #endif
 
-    next_obj.id = biggest_temp_id;
-    // tutaj można by zrobić rozkład - tak żeby uwzględnić ile było takich id w otoczeniu
-    // i temperatury to jakby wagi, najliczniejszy z najwyższymi temperaturami ma największą szansą na przekonianie
-    // aktualniej sfery żeby ona wzięła jego id
-    // (też uwzględniamy to, że sfera może zostać przy swoim ID)
+    #ifdef ID_CHANGES_SOFTMAXING_SUMMED_TEMP
+        summed_temp_for_each_id[current_obj.id] += current_obj.t; // taking into consideration self temperature //
 
-    // tutaj też trzeba dodać, że po prostu jeśli jest wyższa wartość absolutna
-    // (nie tylko relatywna - w porównaniu ze średnią)
-    // to ten ma większą szansę "przekonywania", tak żeby było widać, że w miejscach gorących robią się większ ziarna
+        // summed_temp_for_each_id to rozpiska id -> i suma temperatur obiektów z każdej grupy id //
+        // [id] -> temp_sum
+
+        // teraz mamy absolutną sumę temperatur dla każdego id //
+        // jeśli damy średnią to przestaniemy uwzględniać ile kuli tego samego id jest na około //
+
+        unit biggest_summed_temp = 0;
+        for(int i=0; i < ID_RANGE; i++)
+        {
+            if(biggest_summed_temp < summed_temp_for_each_id[i])
+            {
+                biggest_summed_temp = summed_temp_for_each_id[i];
+            }
+        }
+
+        // scaling to [0, 1] so soft max does not explode from exp(x) //
+        for(int i=0; i < ID_RANGE; i++)
+        {
+            summed_temp_for_each_id[i] /= biggest_summed_temp;
+        }
+
+        soft_max_value(summed_temp_for_each_id, soft_max_param);
+        auto& chance_list = summed_temp_for_each_id;
+
+        // teraz temperatury zmieniły się w prawdopodobieństwo //
+
+        int picked_id = pick_based_on_provided_chance(chance_list, seed, i);
+
+        // teraz jeszcze możemy dodać liniową zależność, że tym większa szansa na zmianę im wyższa temperatura obiektu //
+
+        
+
+        next_obj.id = picked_id;
+    #endif
 }
 
 void dump_all_saved_states_to_file(ObjTracker& obj_tracker)
@@ -346,7 +383,7 @@ int main(int argc, char* argv[])
             {
                 auto& arr = obj_tracker.get_current_obj();
                 
-                #pragma omp for schedule(static)
+                #pragma omp for schedule(static) 
                 for(int i=0; i<arr.get_total_number(); i++)
                 {
                     per_sphere(0, step, obj_tracker.get_current_obj().get(0), obj_tracker.get_next_obj().get(0), i,

@@ -2,6 +2,30 @@
 #include <limits>
 
 template<typename T>
+class Biggest
+{
+    int its_id;
+    T max;
+
+public:
+    GPU_LINE(__host__ __device__)
+    Biggest(T _max = std::numeric_limits<T>::lowest()) : its_id(0), max(_max) {}
+
+    GPU_LINE(__host__ __device__)
+    void input(const T& value, int id)
+    {
+        if(max < value)
+        {
+            max = value;
+            its_id = id;
+        }
+    }
+
+    GPU_LINE(__host__ __device__) T get_value() const { return max; }
+    GPU_LINE(__host__ __device__) int get_id() const { return its_id; }
+};
+
+template<typename T>
 class MinMax
 {
     T min;
