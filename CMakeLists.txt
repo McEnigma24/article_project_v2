@@ -113,11 +113,11 @@ else()
     set_target_properties(${TARGET_NAME} PROPERTIES ${COMPILE_FLAGS} ${LINK_FLAGS})
     target_link_libraries(${TARGET_NAME} PUBLIC ${ALL_LIBRARIES})
 
-    # set(TARGET_NAME "${CONST_TARGET_NAME}_gpu.exe")
-    # add_executable(${TARGET_NAME} ${SOURCES})
-    # target_compile_definitions(${TARGET_NAME} PRIVATE LINUX BUILD_EXECUTABLE GPU)
-    # set_target_properties(${TARGET_NAME} PROPERTIES ${COMPILE_FLAGS} ${LINK_FLAGS})
-    # target_link_libraries(${TARGET_NAME} PUBLIC ${ALL_LIBRARIES})
+    set(TARGET_NAME "${CONST_TARGET_NAME}_gpu.exe")
+    add_executable(${TARGET_NAME} ${SOURCES})
+    target_compile_definitions(${TARGET_NAME} PRIVATE LINUX BUILD_EXECUTABLE GPU)
+    set_target_properties(${TARGET_NAME} PROPERTIES ${COMPILE_FLAGS} ${LINK_FLAGS})
+    target_link_libraries(${TARGET_NAME} PUBLIC ${ALL_LIBRARIES})
 endif()
 
 option(ARTICLE_PROJECT_V2___CTEST_ACTIVE "Testing is active" OFF)  # default value - could be overwritten by provided FLAG

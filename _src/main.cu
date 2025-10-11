@@ -106,7 +106,7 @@ public:
     {
         u64 count_spheres_in_one_iteration = width * height * depth;
         u64 count_all_iterations = count_spheres_in_one_iteration * sim_steps;
-        CPU_LINE(var(CORE::humanReadableBytes(count_all_iterations * sizeof(Sphere)));)
+        var(CORE::humanReadableBytes(count_all_iterations * sizeof(Sphere)));
 
         current_array_index = 0;
 
@@ -290,7 +290,7 @@ void per_sphere(unsigned long seed, int step, Sphere* current_array, Sphere* nex
         next_obj.t -= u(constant_cooling); // potem można bardziej zaawansowany //
                                            // np. sprawdzanie jak daleko masz do krawędzi ze współrzędnych //
 
-        next_obj.t = std::max(next_obj.t, 1.0); // temp always bigger then absolute zero // not exacly zero to 0.1 to avoid division by zero //
+        next_obj.t = (next_obj.t > 1.0) ? next_obj.t : 1.0; // temp always bigger then absolute zero // not exacly zero to 0.1 to avoid division by zero //
     #endif
 
     #ifdef ID_CHANGES_MAX_TEMP
@@ -329,10 +329,27 @@ void per_sphere(unsigned long seed, int step, Sphere* current_array, Sphere* nex
         int picked_id = pick_based_on_provided_chance(chance_list, seed, i);
 
         // teraz jeszcze możemy dodać liniową zależność, że tym większa szansa na zmianę im wyższa temperatura obiektu //
-
+        // im wyższa temperatura, tym bardziej "aktywny" jest obiekt i chętniej zmienia ID //
         
-
-        next_obj.id = picked_id;
+        unit temp_normalized = current_obj.t / temp_threshold_for_id_change; // normalizacja względem progu
+        unit change_probability = temp_normalized / (temp_normalized + u(1.0)); // sigmoid-like [0, 1]
+        
+        #if defined(__CUDA_ARCH__) && defined(GPU)
+            curandState state;
+            curand_init(seed + i, i, 0, &state);
+            unit random_chance = curand_uniform(&state);
+        #else
+            unit random_chance = std::rand() / u(RAND_MAX);
+        #endif
+        
+        if(random_chance < change_probability)
+        {
+            next_obj.id = picked_id;
+        }
+        else
+        {
+            next_obj.id = current_obj.id; // zachowaj obecne ID
+        }
     #endif
 }
 
@@ -348,11 +365,6 @@ void dump_all_saved_states_to_file(ObjTracker& obj_tracker)
 }
 
 #ifdef GPU
-    __global__ void init_ObjTracker(ObjTracker* dev_objTracker, i64 width, i64 height, i64 depth, Sphere** dev_tab_of_chunks, unsigned long seed)
-    {
-        dev_objTracker->set_with_preallocated_tab(width, height, depth, dev_tab_of_chunks, seed, false);
-    }
-
     __global__ void kernel_Calculations(Sphere** dev_tab_of_chunks, u64 width, u64 height, u64 depth, unsigned long seed, int step)
     {
         int i = threadIdx.x + blockIdx.x * blockDim.x;
@@ -370,7 +382,7 @@ int main(int argc, char* argv[])
     srand(time(NULL));
     // ObjTracker - mogę mu podać tyle samo co sim_steps, wtedy zapisze jak już będzie po wszystkim -> albo batch, po którym zapiszę wszystko do pliku
 
-    ObjTracker obj_tracker(cube_side, cube_side, cube_side);
+    ObjTracker obj_tracker(sim_width, sim_height, sim_depth);
 
     time_stamp_reset();
 
@@ -412,11 +424,6 @@ int main(int argc, char* argv[])
 
         size_t bytesize_of_one_iteration = obj_tracker.get_size_of_one_iteration() * sizeof(Sphere);
 
-        // Alokacja - obj trackera //
-        ObjTracker* dev_obj_tracker = nullptr;
-        CCE(cudaMalloc((void**)&dev_obj_tracker, sizeof(ObjTracker)));
-        CCE(cudaMemcpy(dev_obj_tracker, &obj_tracker, sizeof(ObjTracker), cudaMemcpyHostToDevice));
-
         // Alokacja - wypełniamy tablicę po stronie HOST, pointerami do chunków po stronie DEVICE //
         std::array<Sphere*, sim_steps> dev_arr_of_chunks;
         for(auto& dev_chunk_ptr : dev_arr_of_chunks)
@@ -427,7 +434,6 @@ int main(int argc, char* argv[])
             if(first)
             {
                 first = false;
-                var(obj_tracker.get_current_obj().get_data());
                 CCE(cudaMemcpy(dev_chunk_ptr, obj_tracker.get_current_obj().get_data(), bytesize_of_one_iteration, cudaMemcpyHostToDevice));
             }
         }
@@ -442,15 +448,13 @@ int main(int argc, char* argv[])
         auto depth = obj_tracker.get_current_obj().get_depth();
 
         time_stamp("GPU - allocations / memcopies");
-        init_ObjTracker<<<1, 1>>>(dev_obj_tracker, width, height, depth, dev_tab_of_chunks, time(0));
-        CCE(cudaDeviceSynchronize());
-        time_stamp("GPU - prep");
 
         int BLOCK_SIZE = 128;
 	    int NUMBER_OF_BLOCKS = obj_tracker.get_size_of_one_iteration() / BLOCK_SIZE + 1;
 
         for(int step = 0; step < (sim_steps - 1); step++)
         {
+            // var(step);
             kernel_Calculations<<<NUMBER_OF_BLOCKS, BLOCK_SIZE>>>(dev_tab_of_chunks, width, height, depth, 1, step);
             CCE(cudaDeviceSynchronize()); // Synchronizacja między krokami
         }
@@ -473,7 +477,6 @@ int main(int argc, char* argv[])
         time_stamp("GPU - copying outpus back to HOST");
 
         CCE(cudaFree(dev_tab_of_chunks));
-        CCE(cudaFree(dev_obj_tracker));
 
         time_stamp("GPU - cleanup");
 

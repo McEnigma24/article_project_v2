@@ -8,12 +8,6 @@
 GPU_LINE(__host__ __device__)
 void soft_max_value(unit* input, const double param = 1)
 {
-    // {
-    //     ostringstream oss;
-    //     for(int i=0; i < ID_RANGE; i++) { oss << input[i] << " "; }
-    //     line("Before - " + oss.str());
-    // }
-
     double exp_from_input[ID_RANGE];
     double sum = 0;
 
@@ -23,10 +17,6 @@ void soft_max_value(unit* input, const double param = 1)
         
         exp_from_input[i] = e;
         sum += e;
-
-        // var(input[i] / param);
-        // var(e);
-        // var(sum);
     }
 
     // has to separate loop so we have a sum //
@@ -35,12 +25,6 @@ void soft_max_value(unit* input, const double param = 1)
     {
         input[i] = ( exp_from_input[i] / sum );
     }
-
-    // {
-    //     ostringstream oss;
-    //     for(int i=0; i < ID_RANGE; i++) { oss << input[i] << " "; }
-    //     line("After - " + oss.str());
-    // }
 }
 
 GPU_LINE(__host__ __device__)
