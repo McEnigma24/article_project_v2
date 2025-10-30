@@ -6,68 +6,8 @@
 #include "min_max.hpp"
 #include "selection_func.hpp"
 #include "consts.h"
+#include "Sphere.hpp"
 
-
-struct Sphere
-{
-    int id;
-    unit t;
-    
-    GPU_LINE(__device__ __host__)
-    void init(unsigned long seed)
-    {
-        #if defined(__CUDA_ARCH__) && defined(GPU)
-            curandState state;
-            curand_init(seed, threadIdx.x, 0, &state);
-
-            this->id = ((int)(curand_uniform(&state) * ID_RANGE)) % ID_RANGE;
-            this->t = (int)(curand_uniform(&state) * 40) + ZERO_CELC_IN_KELV - 20;
-        #else
-            this->id = std::rand() % ID_RANGE;
-            this->t = (std::rand() % 40) + ZERO_CELC_IN_KELV - 20; // 20 °C
-        #endif
-    }
-
-    // x, y, z - id - t //
-    static void dump_to_file(Multi_Dimension_View_Array<Sphere>& arr)
-    {
-        CPU_LINE(const string& FILEPATH = "output/cpu.xyz";)
-        GPU_LINE(const string& FILEPATH = "output/gpu.xyz";)
-
-        std::ofstream fout(FILEPATH, std::ios::out | std::ios::app);
-        if (!fout)
-        {
-            std::cerr << "Nie można otworzyć pliku do nadpisania: " << FILEPATH << "\n";
-            return;
-        }
-
-        fout << arr.get_total_number() << endl;
-        fout << " " << endl;
-        for(int z=0; z<arr.get_depth(); z++)
-            for(int y=0; y<arr.get_height(); y++)
-                for(int x=0; x<arr.get_width(); x++)
-        {
-            const auto& obj = *arr.get(x, y, z);
-
-            char buf[256];
-            int len = std::snprintf(//  x  y  z id  t
-                    buf, sizeof(buf), "%d %d %d %d %f\n",
-                    x * 2, y * 2, z * 2, obj.id, obj.t
-            );
-            if (len > 0)
-            {
-                fout << buf;
-            }
-        }
-
-        if (!fout)
-        {
-            std::cerr << "Błąd podczas zapisu do pliku: " << FILEPATH << "\n";
-            fout.close();
-        }
-        fout.close();
-    }
-};
 
 GPU_LINE(__host__ __device__)
 void initialize_sim(Multi_Dimension_View_Array<Sphere>& arr, unsigned long seed)
@@ -126,6 +66,8 @@ public:
             if(i == 0)
                 initialize_sim(arr_of_objects[i], 0);
         }
+
+        // line("ObjTracker - init complete");
     }
 
     GPU_LINE(__host__ __device__)
@@ -215,6 +157,95 @@ coords get_coords(u64 index_1d, u64 WIDTH, u64 HEIGHT)
     return c;
 }
 
+struct id_temp_Controller
+{
+    Sphere summed_temp_for_each_id[neighbor_count];
+
+    GPU_LINE(__device__ __host__)
+    void init()
+    {
+        for(int i=0; i<neighbor_count; i++)
+        {
+            summed_temp_for_each_id[i].id = 0;
+            summed_temp_for_each_id[i].t = 0;
+        }
+    }
+
+    GPU_LINE(__device__ __host__)
+    void add(const Sphere& obj)
+    {
+        for(int i=0; i<neighbor_count; i++)
+        {
+            auto& current = summed_temp_for_each_id[i];
+
+            if(current.id == obj.id)
+            {
+                current.t += obj.t;
+                return;
+            }
+            else if(current.id == 0)
+            {
+                current.id = obj.id;
+                current.t = obj.t;
+                return;
+            }
+
+            // czyli zapycha od początku - jak natrafi na 0, to tam wstawi //
+        }
+    }
+
+    GPU_LINE(__device__ __host__)
+    unit add_up_all_temps()
+    {
+        unit total = 0;
+        for(int i=0; i<neighbor_count; i++)
+        {
+            total += summed_temp_for_each_id[i].t;
+        }
+        return total;
+    }
+
+    GPU_LINE(__device__ __host__)
+    unit biggest_summed_temp()
+    {
+        unit biggest_temp = 0;
+        for(int i=0; i<neighbor_count; i++)
+        {
+            if(biggest_temp < summed_temp_for_each_id[i].t)
+            {
+                biggest_temp = summed_temp_for_each_id[i].t;
+            }
+        }
+        return biggest_temp;
+    }
+
+    GPU_LINE(__device__ __host__)
+    void devide_by(const unit& num)
+    {
+        for(int i=0; i<neighbor_count; i++)
+        {
+            summed_temp_for_each_id[i].t /= num;
+        }
+    }
+
+    GPU_LINE(__device__ __host__)
+    Sphere* get_tab()
+    {
+        return summed_temp_for_each_id;
+    }
+
+    GPU_LINE(__device__ __host__)
+    u64 get_size()
+    {
+        for(int i=0; i<neighbor_count; i++)
+        {
+            if(summed_temp_for_each_id[i].id == 0)
+                return i;
+        }
+        return neighbor_count;
+    }
+};
+
 GPU_LINE(__device__ __host__)
 void per_sphere(unsigned long seed, int step, Sphere* current_array, Sphere* next_array, int i, u64 width, u64 height, u64 depth)
 {
@@ -228,13 +259,8 @@ void per_sphere(unsigned long seed, int step, Sphere* current_array, Sphere* nex
         int biggest_temp_id = current_obj.id;
     #endif
 
-    constexpr int neighbor_range = 1;
-    constexpr int neighbor_width = (neighbor_range * 2) + 1;
-    constexpr int neighbor_count = neighbor_width * neighbor_width * neighbor_width - 1;
-
-    unit summed_temp_for_each_id[ID_RANGE];
-    for(int i=0; i<ID_RANGE; i++)
-        summed_temp_for_each_id[i] = 0;
+    id_temp_Controller controller;
+    controller.init();
     
     // pętla po sąsiadach - Moora 3D
     for(int dz=-neighbor_range; dz<=neighbor_range; dz++)
@@ -257,7 +283,7 @@ void per_sphere(unsigned long seed, int step, Sphere* current_array, Sphere* nex
             }
         #endif
 
-        summed_temp_for_each_id[neighbor.id] += neighbor.t;
+        controller.add(neighbor);
     }
 
 
@@ -265,11 +291,7 @@ void per_sphere(unsigned long seed, int step, Sphere* current_array, Sphere* nex
     #ifdef TEMP_CHANGES
         next_obj.t = current_obj.t; // base line //
 
-        unit neighbor_temp_sum = 0;
-        for(int i=0; i<ID_RANGE; i++)
-        {
-            neighbor_temp_sum += summed_temp_for_each_id[i]; // not including self temperature //
-        }
+        unit neighbor_temp_sum = controller.add_up_all_temps();
         unit neighbor_temp_avg = neighbor_temp_sum / u(neighbor_count);
 
         unit full_delta = neighbor_temp_avg - current_obj.t;
@@ -298,42 +320,13 @@ void per_sphere(unsigned long seed, int step, Sphere* current_array, Sphere* nex
     #endif
 
     #ifdef ID_CHANGES_SOFTMAXING_SUMMED_TEMP
-        summed_temp_for_each_id[current_obj.id] += current_obj.t; // taking into consideration self temperature //
-
-        // summed_temp_for_each_id to rozpiska id -> i suma temperatur obiektów z każdej grupy id //
-        // [id] -> temp_sum
-
-        // teraz mamy absolutną sumę temperatur dla każdego id //
-        // jeśli damy średnią to przestaniemy uwzględniać ile kuli tego samego id jest na około //
-
-        unit biggest_summed_temp = 0;
-        for(int i=0; i < ID_RANGE; i++)
-        {
-            if(biggest_summed_temp < summed_temp_for_each_id[i])
-            {
-                biggest_summed_temp = summed_temp_for_each_id[i];
-            }
-        }
-
-        // scaling to [0, 1] so soft max does not explode from exp(x) //
-        for(int i=0; i < ID_RANGE; i++)
-        {
-            summed_temp_for_each_id[i] /= biggest_summed_temp;
-        }
-
-        soft_max_value(summed_temp_for_each_id, soft_max_param);
-        auto& chance_list = summed_temp_for_each_id;
-
-        // teraz temperatury zmieniły się w prawdopodobieństwo //
-
-        int picked_id = pick_based_on_provided_chance(chance_list, seed, i);
 
         // teraz jeszcze możemy dodać liniową zależność, że tym większa szansa na zmianę im wyższa temperatura obiektu //
         // im wyższa temperatura, tym bardziej "aktywny" jest obiekt i chętniej zmienia ID //
-        
+
         unit temp_normalized = current_obj.t / temp_threshold_for_id_change; // normalizacja względem progu
         unit change_probability = temp_normalized / (temp_normalized + u(1.0)); // sigmoid-like [0, 1]
-        
+
         #if defined(__CUDA_ARCH__) && defined(GPU)
             curandState state;
             curand_init(seed + i, i, 0, &state);
@@ -342,14 +335,43 @@ void per_sphere(unsigned long seed, int step, Sphere* current_array, Sphere* nex
             unit random_chance = std::rand() / u(RAND_MAX);
         #endif
         
-        if(random_chance < change_probability)
-        {
-            next_obj.id = picked_id;
-        }
-        else
+        if(!(random_chance < change_probability))
         {
             next_obj.id = current_obj.id; // zachowaj obecne ID
         }
+        else
+        {
+            controller.add(current_obj);
+            // summed_temp_for_each_id[current_obj.id] += current_obj.t; // taking into consideration self temperature //
+
+            // summed_temp_for_each_id to rozpiska id -> i suma temperatur obiektów z każdej grupy id //
+            // [id] -> temp_sum
+
+            // teraz mamy absolutną sumę temperatur dla każdego id //
+            // jeśli damy średnią to przestaniemy uwzględniać ile kuli tego samego id jest na około //
+
+            unit biggest_summed_temp = controller.biggest_summed_temp();
+            
+            // scaling to [0, 1] so soft max does not explode from exp(x) //
+            controller.devide_by(biggest_summed_temp);
+
+            soft_max_value(controller.get_tab(), controller.get_size(), soft_max_param);
+            // CPU_LINE(var(controller.get_size());)
+            // CPU_LINE(var(neighbor_count));
+
+            // teraz temperatury zmieniły się w prawdopodobieństwo //
+
+            int picked_id = pick_based_on_provided_chance(controller.get_tab(), controller.get_size(), seed, i);
+
+            CPU_LINE(line("\n\n"));
+            for(int i=0; i<controller.get_size(); i++)
+            {
+                CPU_LINE(line("id: " + std::to_string(controller.get_tab()[i].id) + " chance: " + std::to_string(controller.get_tab()[i].t));)
+            }
+
+            next_obj.id = picked_id;
+        }
+
     #endif
 }
 
@@ -390,6 +412,8 @@ int main(int argc, char* argv[])
     {
         #pragma omp parallel
         {
+            omp_set_num_threads(1);
+
             srand(time(NULL));
             for(int step = 0; step < (sim_steps - 1); step++)
             {
@@ -406,6 +430,7 @@ int main(int argc, char* argv[])
                 #pragma omp barrier
                 #pragma omp single
                 {
+                    line("CPU - next cycle " + std::to_string(step));
                     obj_tracker.next_cycle();
                 }
             }
@@ -418,76 +443,78 @@ int main(int argc, char* argv[])
     }
     #endif
 
-    #ifdef GPU
-    {
-        CCE(cudaSetDevice(0));
+    // #ifdef GPU
+    // {
+    //     CCE(cudaSetDevice(0));
 
-        size_t bytesize_of_one_iteration = obj_tracker.get_size_of_one_iteration() * sizeof(Sphere);
+    //     size_t bytesize_of_one_iteration = obj_tracker.get_size_of_one_iteration() * sizeof(Sphere);
 
-        // Alokacja - wypełniamy tablicę po stronie HOST, pointerami do chunków po stronie DEVICE //
-        std::array<Sphere*, sim_steps> dev_arr_of_chunks;
-        for(auto& dev_chunk_ptr : dev_arr_of_chunks)
-        {
-            CCE(cudaMalloc((void**)&dev_chunk_ptr, bytesize_of_one_iteration));
+    //     // Alokacja - wypełniamy tablicę po stronie HOST, pointerami do chunków po stronie DEVICE //
+    //     std::array<Sphere*, sim_steps> dev_arr_of_chunks;
+    //     for(auto& dev_chunk_ptr : dev_arr_of_chunks)
+    //     {
+    //         CCE(cudaMalloc((void**)&dev_chunk_ptr, bytesize_of_one_iteration));
             
-            static bool first = true;
-            if(first)
-            {
-                first = false;
-                CCE(cudaMemcpy(dev_chunk_ptr, obj_tracker.get_current_obj().get_data(), bytesize_of_one_iteration, cudaMemcpyHostToDevice));
-            }
-        }
+    //         static bool first = true;
+    //         if(first)
+    //         {
+    //             first = false;
+    //             CCE(cudaMemcpy(dev_chunk_ptr, obj_tracker.get_current_obj().get_data(), bytesize_of_one_iteration, cudaMemcpyHostToDevice));
+    //         }
+    //     }
 
-        // Alokacja - tablicy chunków na DEVICE i skopiowanie pointerów jakie dostaliśmy //
-        Sphere** dev_tab_of_chunks = nullptr;
-        CCE(cudaMalloc((void**)&dev_tab_of_chunks, sim_steps * sizeof(Sphere*)));
-        CCE(cudaMemcpy(dev_tab_of_chunks, dev_arr_of_chunks.data(), sim_steps * sizeof(Sphere*), cudaMemcpyHostToDevice));
+    //     // Alokacja - tablicy chunków na DEVICE i skopiowanie pointerów jakie dostaliśmy //
+    //     Sphere** dev_tab_of_chunks = nullptr;
+    //     CCE(cudaMalloc((void**)&dev_tab_of_chunks, sim_steps * sizeof(Sphere*)));
+    //     CCE(cudaMemcpy(dev_tab_of_chunks, dev_arr_of_chunks.data(), sim_steps * sizeof(Sphere*), cudaMemcpyHostToDevice));
 
-        auto width = obj_tracker.get_current_obj().get_width();
-        auto height = obj_tracker.get_current_obj().get_height();
-        auto depth = obj_tracker.get_current_obj().get_depth();
+    //     auto width = obj_tracker.get_current_obj().get_width();
+    //     auto height = obj_tracker.get_current_obj().get_height();
+    //     auto depth = obj_tracker.get_current_obj().get_depth();
 
-        time_stamp("GPU - allocations / memcopies");
+    //     time_stamp("GPU - allocations / memcopies");
 
-        int BLOCK_SIZE = 128;
-	    int NUMBER_OF_BLOCKS = obj_tracker.get_size_of_one_iteration() / BLOCK_SIZE + 1;
+    //     int BLOCK_SIZE = 128;
+	//     int NUMBER_OF_BLOCKS = obj_tracker.get_size_of_one_iteration() / BLOCK_SIZE + 1;
 
-        for(int step = 0; step < (sim_steps - 1); step++)
-        {
-            // var(step);
-            kernel_Calculations<<<NUMBER_OF_BLOCKS, BLOCK_SIZE>>>(dev_tab_of_chunks, width, height, depth, 1, step);
-            CCE(cudaDeviceSynchronize()); // Synchronizacja między krokami
-        }
-        time_stamp("GPU - FINISH");
+    //     for(int step = 0; step < (sim_steps - 1); step++)
+    //     {
+    //         // var(step);
+    //         kernel_Calculations<<<NUMBER_OF_BLOCKS, BLOCK_SIZE>>>(dev_tab_of_chunks, width, height, depth, 1, step);
+    //         CCE(cudaDeviceSynchronize()); // Synchronizacja między krokami
 
-
-        // kopiujemy z powrotem outputem //
-        std::array<Sphere*, sim_steps> host_tab_of_chunks;
-        for(int i=0; i<dev_arr_of_chunks.size(); i++)
-        {
-            auto& dev_chunk_ptr = dev_arr_of_chunks[i];
-
-            Sphere* host_one_chunk = new Sphere[bytesize_of_one_iteration];
-            CCE(cudaMemcpy(host_one_chunk, dev_chunk_ptr, bytesize_of_one_iteration, cudaMemcpyDeviceToHost));
-
-            host_tab_of_chunks[i] = host_one_chunk; // teraz std::array ma pointery do HOST side chunków
-
-            CCE(cudaFree(dev_chunk_ptr));
-        }
-        time_stamp("GPU - copying outpus back to HOST");
-
-        CCE(cudaFree(dev_tab_of_chunks));
-
-        time_stamp("GPU - cleanup");
+    //         line("GPU - next cycle " + std::to_string(step));
+    //     }
+    //     time_stamp("GPU - FINISH");
 
 
+    //     // kopiujemy z powrotem outputem //
+    //     std::array<Sphere*, sim_steps> host_tab_of_chunks;
+    //     for(int i=0; i<dev_arr_of_chunks.size(); i++)
+    //     {
+    //         auto& dev_chunk_ptr = dev_arr_of_chunks[i];
 
-        obj_tracker.set_with_preallocated_tab(width, height, depth, host_tab_of_chunks.data(), 0, false);
-        dump_all_saved_states_to_file(obj_tracker);
+    //         Sphere* host_one_chunk = new Sphere[bytesize_of_one_iteration];
+    //         CCE(cudaMemcpy(host_one_chunk, dev_chunk_ptr, bytesize_of_one_iteration, cudaMemcpyDeviceToHost));
 
-        time_stamp("GPU - io DONE");
-    }
-    #endif
+    //         host_tab_of_chunks[i] = host_one_chunk; // teraz std::array ma pointery do HOST side chunków
+
+    //         CCE(cudaFree(dev_chunk_ptr));
+    //     }
+    //     time_stamp("GPU - copying outpus back to HOST");
+
+    //     CCE(cudaFree(dev_tab_of_chunks));
+
+    //     time_stamp("GPU - cleanup");
+
+
+
+    //     obj_tracker.set_with_preallocated_tab(width, height, depth, host_tab_of_chunks.data(), 0, false);
+    //     dump_all_saved_states_to_file(obj_tracker);
+
+    //     time_stamp("GPU - io DONE");
+    // }
+    // #endif
 
     return 0;
 }

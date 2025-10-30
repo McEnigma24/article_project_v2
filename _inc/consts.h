@@ -3,12 +3,20 @@
 #define sphere_radius ( 1.0f )
 #define ID_RANGE ( 15 )
 
-// constexpr int cube_side = 50;
-constexpr int sim_width = 250;
-constexpr int sim_depth = 100;
-constexpr int sim_height = 50;
+// constexpr int multiplier = 1;
+// constexpr int multiplier = 10;
+constexpr int multiplier = 3;
 
-constexpr int sim_steps = 300;
+constexpr int sim_width = 25 * multiplier;
+constexpr int sim_depth = 10 * multiplier;
+constexpr int sim_height = 5 * multiplier;
+
+// constexpr int sim_steps = 300;
+constexpr int sim_steps = 100;
+
+constexpr int neighbor_range = 1;
+constexpr int neighbor_width = (neighbor_range * 2) + 1;
+constexpr int neighbor_count = neighbor_width * neighbor_width * neighbor_width - 1;
 
 // °C to K
 #define ZERO_CELC_IN_KELV ( u(273.15) )
@@ -25,7 +33,7 @@ constexpr int sim_steps = 300;
 #define sides_heating ( 20 )
 
 // temperatura przy której prawdopodobieństwo zmiany ID = 50% //
-#define temp_threshold_for_id_change ( ZERO_CELC_IN_KELV - 60 )
+#define temp_threshold_for_id_change ( ZERO_CELC_IN_KELV )
 
 // / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / //
 

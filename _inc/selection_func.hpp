@@ -4,16 +4,19 @@
 #include "parallel_common.h"
 #include <span>
 #include "consts.h"
+#include "Sphere.hpp"
 
 GPU_LINE(__host__ __device__)
-void soft_max_value(unit* input, const double param = 1)
+void soft_max_value(Sphere* input, u64 size, const double param = 1)
 {
-    double exp_from_input[ID_RANGE];
+    double exp_from_input[neighbor_count];         for(int i=0; i < neighbor_count; i++) exp_from_input[i] = 0;
     double sum = 0;
 
-    for(int i=0; i < ID_RANGE; i++)
+    size = neighbor_count;
+
+    for(int i=0; i < size; i++)
     {
-        double e = exp( input[i] / param ); // to może nie działać na GPU //
+        double e = exp( input[i].t / param ); // to może nie działać na GPU //
         
         exp_from_input[i] = e;
         sum += e;
@@ -21,9 +24,9 @@ void soft_max_value(unit* input, const double param = 1)
 
     // has to separate loop so we have a sum //
     
-    for(int i=0; i < ID_RANGE; i++)
+    for(int i=0; i < size; i++)
     {
-        input[i] = ( exp_from_input[i] / sum );
+        input[i].t = ( exp_from_input[i] / sum );
     }
 }
 
@@ -41,15 +44,17 @@ double random_0_1(unsigned long seed, int threadIdx)
 }
 
 GPU_LINE(__host__ __device__)
-int pick_based_on_provided_chance(unit* element_list, unsigned long seed, int threadIdx)
+int pick_based_on_provided_chance(Sphere* element_list, u64 size, unsigned long seed, int threadIdx)
 {
+    size = neighbor_count;
+
     for(;;) // we keep on trying until we pick something //
     {
         double random = random_0_1(seed, threadIdx);
         double running_sum = 0;
-        for(int i=0; i < ID_RANGE; i++)
+        for(int i=0; i < size; i++)
         {
-            running_sum += element_list[i];
+            running_sum += element_list[i].t;
             if(random <= running_sum)
             {
                 return i;
@@ -58,6 +63,8 @@ int pick_based_on_provided_chance(unit* element_list, unsigned long seed, int th
 
         // we come here if values do not sum up to 1 // - rest of the range is undefined, so we just pick
         // one more time, until we strike a chance defined value
+
+        CPU_LINE(line("looking for another pick"));
     }
 
     return {};
