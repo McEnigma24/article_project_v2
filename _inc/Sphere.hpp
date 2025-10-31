@@ -12,10 +12,8 @@ struct Sphere
     {
         this->t = (std::rand() % 40) + ZERO_CELC_IN_KELV - 20; // 20 °C
 
-        // static u64 id_counter = 1;
-
-        this->id = (std::rand() % ID_RANGE) + 1;
-        // this->id = id_counter++;
+        static u64 id_counter = 1;     this->id = id_counter++;
+        // this->id = (std::rand() % ID_RANGE) + 1;
     }
 
     // x, y, z - id - t //

@@ -29,7 +29,7 @@ constexpr int neighbor_count = neighbor_width * neighbor_width * neighbor_width 
 #define temp_adaptation_to_neighbors_factor ( 0.75 )
 #define soft_max_param ( 0.1 )
 
-#define constant_cooling ( 0.1 )
+#define constant_cooling ( 0.5 )
 #define sides_heating ( 20 )
 
 // temperatura przy której prawdopodobieństwo zmiany ID = 50% //
