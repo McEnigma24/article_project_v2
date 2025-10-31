@@ -6,5 +6,6 @@ exe/
 log/
 output/
 run_time_config/
+before_working/
 
 .last_arch_marker

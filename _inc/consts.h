@@ -11,8 +11,8 @@ constexpr int sim_width = 25 * multiplier;
 constexpr int sim_depth = 10 * multiplier;
 constexpr int sim_height = 5 * multiplier;
 
-// constexpr int sim_steps = 300;
-constexpr int sim_steps = 100;
+constexpr int sim_steps = 300;
+// constexpr int sim_steps = 100;
 
 constexpr int neighbor_range = 1;
 constexpr int neighbor_width = (neighbor_range * 2) + 1;

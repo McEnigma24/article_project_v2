@@ -12,8 +12,6 @@ void soft_max_value(Sphere* input, u64 size, const double param = 1)
     double exp_from_input[neighbor_count];         for(int i=0; i < neighbor_count; i++) exp_from_input[i] = 0;
     double sum = 0;
 
-    size = neighbor_count;
-
     for(int i=0; i < size; i++)
     {
         double e = exp( input[i].t / param ); // to może nie działać na GPU //
@@ -46,8 +44,6 @@ double random_0_1(unsigned long seed, int threadIdx)
 GPU_LINE(__host__ __device__)
 int pick_based_on_provided_chance(Sphere* element_list, u64 size, unsigned long seed, int threadIdx)
 {
-    size = neighbor_count;
-
     for(;;) // we keep on trying until we pick something //
     {
         double random = random_0_1(seed, threadIdx);
@@ -57,7 +53,7 @@ int pick_based_on_provided_chance(Sphere* element_list, u64 size, unsigned long 
             running_sum += element_list[i].t;
             if(random <= running_sum)
             {
-                return i;
+                return element_list[i].id;
             }
         }
 

@@ -363,11 +363,11 @@ void per_sphere(unsigned long seed, int step, Sphere* current_array, Sphere* nex
 
             int picked_id = pick_based_on_provided_chance(controller.get_tab(), controller.get_size(), seed, i);
 
-            CPU_LINE(line("\n\n"));
-            for(int i=0; i<controller.get_size(); i++)
-            {
-                CPU_LINE(line("id: " + std::to_string(controller.get_tab()[i].id) + " chance: " + std::to_string(controller.get_tab()[i].t));)
-            }
+            // CPU_LINE(line("\n\n"));
+            // for(int i=0; i<controller.get_size(); i++)
+            // {
+            //     CPU_LINE(line("id: " + std::to_string(controller.get_tab()[i].id) + " chance: " + std::to_string(controller.get_tab()[i].t));)
+            // }
 
             next_obj.id = picked_id;
         }
@@ -443,78 +443,78 @@ int main(int argc, char* argv[])
     }
     #endif
 
-    // #ifdef GPU
-    // {
-    //     CCE(cudaSetDevice(0));
+    #ifdef GPU
+    {
+        CCE(cudaSetDevice(0));
 
-    //     size_t bytesize_of_one_iteration = obj_tracker.get_size_of_one_iteration() * sizeof(Sphere);
+        size_t bytesize_of_one_iteration = obj_tracker.get_size_of_one_iteration() * sizeof(Sphere);
 
-    //     // Alokacja - wypełniamy tablicę po stronie HOST, pointerami do chunków po stronie DEVICE //
-    //     std::array<Sphere*, sim_steps> dev_arr_of_chunks;
-    //     for(auto& dev_chunk_ptr : dev_arr_of_chunks)
-    //     {
-    //         CCE(cudaMalloc((void**)&dev_chunk_ptr, bytesize_of_one_iteration));
+        // Alokacja - wypełniamy tablicę po stronie HOST, pointerami do chunków po stronie DEVICE //
+        std::array<Sphere*, sim_steps> dev_arr_of_chunks;
+        for(auto& dev_chunk_ptr : dev_arr_of_chunks)
+        {
+            CCE(cudaMalloc((void**)&dev_chunk_ptr, bytesize_of_one_iteration));
             
-    //         static bool first = true;
-    //         if(first)
-    //         {
-    //             first = false;
-    //             CCE(cudaMemcpy(dev_chunk_ptr, obj_tracker.get_current_obj().get_data(), bytesize_of_one_iteration, cudaMemcpyHostToDevice));
-    //         }
-    //     }
+            static bool first = true;
+            if(first)
+            {
+                first = false;
+                CCE(cudaMemcpy(dev_chunk_ptr, obj_tracker.get_current_obj().get_data(), bytesize_of_one_iteration, cudaMemcpyHostToDevice));
+            }
+        }
 
-    //     // Alokacja - tablicy chunków na DEVICE i skopiowanie pointerów jakie dostaliśmy //
-    //     Sphere** dev_tab_of_chunks = nullptr;
-    //     CCE(cudaMalloc((void**)&dev_tab_of_chunks, sim_steps * sizeof(Sphere*)));
-    //     CCE(cudaMemcpy(dev_tab_of_chunks, dev_arr_of_chunks.data(), sim_steps * sizeof(Sphere*), cudaMemcpyHostToDevice));
+        // Alokacja - tablicy chunków na DEVICE i skopiowanie pointerów jakie dostaliśmy //
+        Sphere** dev_tab_of_chunks = nullptr;
+        CCE(cudaMalloc((void**)&dev_tab_of_chunks, sim_steps * sizeof(Sphere*)));
+        CCE(cudaMemcpy(dev_tab_of_chunks, dev_arr_of_chunks.data(), sim_steps * sizeof(Sphere*), cudaMemcpyHostToDevice));
 
-    //     auto width = obj_tracker.get_current_obj().get_width();
-    //     auto height = obj_tracker.get_current_obj().get_height();
-    //     auto depth = obj_tracker.get_current_obj().get_depth();
+        auto width = obj_tracker.get_current_obj().get_width();
+        auto height = obj_tracker.get_current_obj().get_height();
+        auto depth = obj_tracker.get_current_obj().get_depth();
 
-    //     time_stamp("GPU - allocations / memcopies");
+        time_stamp("GPU - allocations / memcopies");
 
-    //     int BLOCK_SIZE = 128;
-	//     int NUMBER_OF_BLOCKS = obj_tracker.get_size_of_one_iteration() / BLOCK_SIZE + 1;
+        int BLOCK_SIZE = 128;
+	    int NUMBER_OF_BLOCKS = obj_tracker.get_size_of_one_iteration() / BLOCK_SIZE + 1;
 
-    //     for(int step = 0; step < (sim_steps - 1); step++)
-    //     {
-    //         // var(step);
-    //         kernel_Calculations<<<NUMBER_OF_BLOCKS, BLOCK_SIZE>>>(dev_tab_of_chunks, width, height, depth, 1, step);
-    //         CCE(cudaDeviceSynchronize()); // Synchronizacja między krokami
+        for(int step = 0; step < (sim_steps - 1); step++)
+        {
+            // var(step);
+            kernel_Calculations<<<NUMBER_OF_BLOCKS, BLOCK_SIZE>>>(dev_tab_of_chunks, width, height, depth, 1, step);
+            CCE(cudaDeviceSynchronize()); // Synchronizacja między krokami
 
-    //         line("GPU - next cycle " + std::to_string(step));
-    //     }
-    //     time_stamp("GPU - FINISH");
-
-
-    //     // kopiujemy z powrotem outputem //
-    //     std::array<Sphere*, sim_steps> host_tab_of_chunks;
-    //     for(int i=0; i<dev_arr_of_chunks.size(); i++)
-    //     {
-    //         auto& dev_chunk_ptr = dev_arr_of_chunks[i];
-
-    //         Sphere* host_one_chunk = new Sphere[bytesize_of_one_iteration];
-    //         CCE(cudaMemcpy(host_one_chunk, dev_chunk_ptr, bytesize_of_one_iteration, cudaMemcpyDeviceToHost));
-
-    //         host_tab_of_chunks[i] = host_one_chunk; // teraz std::array ma pointery do HOST side chunków
-
-    //         CCE(cudaFree(dev_chunk_ptr));
-    //     }
-    //     time_stamp("GPU - copying outpus back to HOST");
-
-    //     CCE(cudaFree(dev_tab_of_chunks));
-
-    //     time_stamp("GPU - cleanup");
+            line("GPU - next cycle " + std::to_string(step));
+        }
+        time_stamp("GPU - FINISH");
 
 
+        // kopiujemy z powrotem outputem //
+        std::array<Sphere*, sim_steps> host_tab_of_chunks;
+        for(int i=0; i<dev_arr_of_chunks.size(); i++)
+        {
+            auto& dev_chunk_ptr = dev_arr_of_chunks[i];
 
-    //     obj_tracker.set_with_preallocated_tab(width, height, depth, host_tab_of_chunks.data(), 0, false);
-    //     dump_all_saved_states_to_file(obj_tracker);
+            Sphere* host_one_chunk = new Sphere[bytesize_of_one_iteration];
+            CCE(cudaMemcpy(host_one_chunk, dev_chunk_ptr, bytesize_of_one_iteration, cudaMemcpyDeviceToHost));
 
-    //     time_stamp("GPU - io DONE");
-    // }
-    // #endif
+            host_tab_of_chunks[i] = host_one_chunk; // teraz std::array ma pointery do HOST side chunków
+
+            CCE(cudaFree(dev_chunk_ptr));
+        }
+        time_stamp("GPU - copying outpus back to HOST");
+
+        CCE(cudaFree(dev_tab_of_chunks));
+
+        time_stamp("GPU - cleanup");
+
+
+
+        obj_tracker.set_with_preallocated_tab(width, height, depth, host_tab_of_chunks.data(), 0, false);
+        dump_all_saved_states_to_file(obj_tracker);
+
+        time_stamp("GPU - io DONE");
+    }
+    #endif
 
     return 0;
 }
